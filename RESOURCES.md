@@ -14,6 +14,8 @@
   Primary source for the display controller actually in use. Use for: understanding what the vendored driver (`firmware/lib/ili9341.py`) is doing register-by-register — section 7.1.8 "Serial Interface" (p.33) covers the 3-line vs 4-line SPI framing directly.
 - [Wikipedia: Serial Peripheral Interface](https://en.wikipedia.org/wiki/Serial_Peripheral_Interface)
   Base protocol reference (CS/SCLK/MOSI/MISO, clock polarity/phase, 3-wire vs 4-wire variants). Use for: general SPI vocabulary before diving into a chip-specific datasheet.
+- [rdagger/micropython-ili9341](https://github.com/rdagger/micropython-ili9341) (MIT)
+  Source of the vendored driver at `workbooks/lesson-0002-command-or-data/firmware/lib/ili9341.py`. Use for: what a given driver method actually does before reaching for the datasheet — cross-check the two together.
 
 ## Wisdom (Communities)
 

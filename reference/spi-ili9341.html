@@ -18,13 +18,15 @@
 
   <h2>SPI wire glossary</h2>
   <table>
-    <thead><tr><th>Wire</th><th>Meaning</th><th>On our board</th></tr></thead>
+    <thead><tr><th>Wire</th><th>Meaning</th><th>On our board</th><th>Aliases seen on breakouts</th></tr></thead>
     <tbody>
-      <tr><td><code>SCK</code></td><td>Serial clock, driven by the host</td><td>GP18</td></tr>
-      <tr><td><code>MOSI</code></td><td>Master Out Slave In — host → peripheral data</td><td>GP19</td></tr>
-      <tr><td><code>MISO</code></td><td>Master In Slave Out — peripheral → host data</td><td>not wired — display is write-only</td></tr>
-      <tr><td><code>CS</code></td><td>Chip select — low while a transaction targets this device</td><td>GP17</td></tr>
-      <tr><td><code>D/CX</code> ("DC")</td><td>ILI9341-specific: high = data byte, low = command byte</td><td>GP20</td></tr>
+      <tr><td><code>SCK</code></td><td>Serial clock, driven by the host</td><td>GP18</td><td><code>CLK</code>, <code>SCL</code></td></tr>
+      <tr><td><code>MOSI</code></td><td>Master Out Slave In — host → peripheral data</td><td>GP19</td><td><code>SDI</code>, <code>DIN</code>, <code>SDA</code></td></tr>
+      <tr><td><code>MISO</code></td><td>Master In Slave Out — peripheral → host data</td><td>not wired — display is write-only</td><td><code>SDO</code></td></tr>
+      <tr><td><code>CS</code></td><td>Chip select — low while a transaction targets this device</td><td>GP17</td><td><code>CSX</code></td></tr>
+      <tr><td><code>D/CX</code> ("DC")</td><td>ILI9341-specific: high = data byte, low = command byte</td><td>GP20</td><td><code>DC</code>, <code>A0</code></td></tr>
+      <tr><td><code>RESET</code></td><td>Hardware reset, not an SPI signal at all</td><td>GP21</td><td><code>RST</code>, <code>RES</code></td></tr>
+      <tr><td>backlight</td><td>Not part of SPI at all — a plain digital pin gating the LED backlight, on our board driven <code>Pin.OUT</code> for software on/off</td><td>GP22</td><td><code>LED</code>, <code>BL</code>, <code>BLK</code></td></tr>
     </tbody>
   </table>
   <blockquote class="citation">
