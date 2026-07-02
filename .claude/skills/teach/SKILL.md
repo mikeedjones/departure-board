@@ -77,6 +77,10 @@ Default to reuse. Read `./assets/` before authoring a lesson and build from what
 
 Every workspace needs a shared stylesheet first — it's what makes lessons read as one course instead of a pile of one-offs. Grow the component library as the workspace grows.
 
+## Workbook
+
+The output of each lesson is a workbook, in `./workbooks/lesson-0001-<dash-case-name>/`. Workbooks contain the user's work, and should be self-contained outputs. For example, entire python projects, or a single HTML file with the user's yoga sequence. Each new lesson should have a new workbook, and you may need to copy over the previous workbook if the lesson builds on it.
+
 ## The Mission
 
 Tie every lesson to the mission — the reason the user wants this topic.
