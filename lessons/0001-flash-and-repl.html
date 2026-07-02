@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1 — Flashing MicroPython, and your first REPL</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Lesson 1 · Toolchain</div>
+    <h1>Flashing MicroPython, and your first REPL</h1>
+  </header>
+
+  <p>Parts are assembled: screen, Pico 2 W, breadboard, jump wires. None of that gets touched yet. Before any SPI wiring, the board needs an interpreter on it. That's this lesson: flash MicroPython, get a REPL, prove Python is actually executing on the chip.</p>
+
+  <h2>What "flashing" actually does</h2>
+  <p>On Arduino, <code>avr-gcc</code>/<code>arm-none-eabi-gcc</code> compiles your sketch to machine code, and the bootloader writes <em>that binary</em> to flash on every upload — one compile-and-flash cycle per code change. MicroPython inverts this: you flash a <strong>C-compiled interpreter</strong> onto the RP2350 <em>once</em>, and from then on your <code>.py</code> files are just text it reads and executes at runtime. No recompiling, no reflashing, for every line you change.</p>
+
+  <table>
+    <thead><tr><th></th><th>What</th><th>How often</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Flash</strong></td>
+        <td>The MicroPython interpreter itself — a <code>.uf2</code> image</td>
+        <td>Once (or on a version upgrade)</td>
+      </tr>
+      <tr>
+        <td><strong>Deploy</strong></td>
+        <td>Your <code>.py</code> files, copied onto the interpreter's filesystem</td>
+        <td>Every code change</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="sidenote">This lesson only does the first row. Deploying <code>main.py</code> at the end is a preview of the second — full detail in <a href="../reference/micropython-workflow.html">the workflow reference</a>.</div>
+
+  <h2>Step 1 — flash the interpreter</h2>
+  <ol>
+    <li>Download the Pico 2 W build: <a href="https://micropython.org/download/RPI_PICO2_W/" target="_blank" rel="noopener">micropython.org/download/RPI_PICO2_W</a></li>
+    <li>Disconnect the board from USB. Hold <strong>BOOTSEL</strong>, plug the USB cable in, then release.</li>
+    <li>A drive called <code>RPI-RP2</code> mounts. Drag the downloaded <code>.uf2</code> onto it.</li>
+  </ol>
+  <blockquote class="citation">
+    "It should take a few seconds to program the UF2 file into the flash. The board will automatically reboot when finished, causing the RPI-RP2 drive to disappear, and boot into MicroPython."
+    <cite><a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Raspberry Pi — Connecting to the Internet with Pico W-series</a>, §3.2</cite>
+  </blockquote>
+
+  <h2>Step 2 — get a REPL</h2>
+  <p>Already a Python developer, so skip Thonny's GUI and use <a href="https://docs.micropython.org/en/latest/reference/mpremote.html" target="_blank" rel="noopener"><code>mpremote</code></a> from the terminal instead — it's already added to this project (<code>uv add mpremote</code>, done).</p>
+  <pre><code>uv run mpremote connect list   # find the port
+uv run mpremote                # open a REPL — Ctrl-] to exit</code></pre>
+  <p>At the <code>&gt;&gt;&gt;</code> prompt:</p>
+  <pre><code>&gt;&gt;&gt; import sys
+&gt;&gt;&gt; sys.implementation
+(name='micropython', version=(1, 2X, 0), ...)</code></pre>
+  <p>That's the win condition for this step: a real Python interpreter, talking back, running on hardware that has no operating system underneath it.</p>
+
+  <h2>Aside — the on-board LED isn't on the RP2350</h2>
+  <p>Try this at the REPL:</p>
+  <pre><code>&gt;&gt;&gt; from machine import Pin
+&gt;&gt;&gt; led = Pin("LED", Pin.OUT)
+&gt;&gt;&gt; led.toggle()</code></pre>
+  <blockquote class="citation">
+    "Unlike the non-wireless Pico-series, the on-board LED on Pico W-series is not connected to a pin on RP-series microcontroller, but instead to a GPIO pin on the wireless chip."
+    <cite><a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Raspberry Pi — Connecting to the Internet with Pico W-series</a>, §3.4</cite>
+  </blockquote>
+  <p>That's <code>WL_GPIO0</code> on the <a href="../reference/pico-2-w-specs.html">CYW43439</a> — the same chip that will eventually do Wi-Fi. Worth noticing now, because it means <code>Pin("LED")</code> and <code>Pin(2)</code> are not interchangeable the way "the LED pin" is on an Arduino Uno: the string name routes through a completely different chip than a GPIO number would.</p>
+
+  <div class="quiz" data-answer="deploy">
+    <div class="q">You fix a typo in main.py. Which operation do you repeat: flash or deploy?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>Step 3 — deploy your first program</h2>
+  <p>The workbook for this lesson has <code>firmware/main.py</code> — five LED toggles and two print statements, nothing more. Copy it onto the board and run it:</p>
+  <pre><code>uv run mpremote cp workbooks/lesson-0001-flash-and-repl/firmware/main.py :main.py
+uv run mpremote reset</code></pre>
+  <p><code>reset</code> triggers a soft-reboot, and MicroPython automatically re-runs whatever's saved as <code>main.py</code> on the device — no REPL command needed to launch it.</p>
+  <blockquote class="citation">
+    "If <code>boot.py</code> is found then it is executed... a file named <code>main.py</code>... is executed next."
+    <cite><a href="https://docs.micropython.org/en/latest/reference/reset_boot.html" target="_blank" rel="noopener">MicroPython docs — Reset and boot</a></cite>
+  </blockquote>
+  <p>Rough Arduino mapping: <code>main.py</code> ≈ <code>loop()</code>, except it runs exactly once, top to bottom — no implicit repeat. There's no <code>boot.py</code> in this workbook yet; it's optional, and there's nothing that needs one-time init before <code>main.py</code> yet.</p>
+
+  <div class="win-box">
+    <div class="label">Win condition</div>
+    The LED toggles five times and <code>uv run mpremote</code> (reconnect to see it) prints two lines. That's Python, executing on the chip you soldered nothing to yet.
+  </div>
+
+  <div class="quiz" data-answer="cyw43439|wireless chip|the wireless chip">
+    <div class="q">Pin("LED") on a Pico 2 W is a GPIO on which chip, not the RP2350?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>Reference</h2>
+  <ul>
+    <li><a href="../reference/micropython-workflow.html">Flash vs. deploy, mpremote commands, why lib/ is vendored</a></li>
+    <li><a href="../reference/pico-2-w-specs.html">Pico 2 W quick specs — RP2350 and the CYW43439</a></li>
+  </ul>
+
+  <p class="ask-teacher">Questions about any of this — why MicroPython works this way, what else <code>mpremote</code> can do, why the LED lives on the wireless chip — just ask.</p>
+
+  <nav class="lesson-links">
+    Workbook: <code>workbooks/lesson-0001-flash-and-repl/</code>
+  </nav>
+
+</div>
+</body>
+</html>
