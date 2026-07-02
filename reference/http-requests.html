@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — HTTP requests from MicroPython</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Reference · HTTP &amp; urequests</div>
+    <h1>Making HTTP requests from MicroPython</h1>
+  </header>
+
+  <p>Compressed from <a href="../lessons/0004-first-http-request.html">Lesson 4</a>.</p>
+
+  <h2>Raw sockets — what HTTP actually is on the wire</h2>
+  <pre><code>import socket
+
+ai = socket.getaddrinfo("google.com", 80)
+addr = ai[0][-1]
+
+s = socket.socket()
+s.connect(addr)
+s.send(b"GET / HTTP/1.0\r\n\r\n")
+
+print(s.recv(512))</code></pre>
+  <p>The double <code>\r\n\r\n</code> is the whole protocol: a blank line telling the server "no more headers, this is the end of the request." <code>recv()</code> hands back raw bytes — status line, headers, and body all mixed together, unparsed.</p>
+  <blockquote class="citation">
+    "You can take a low-level approach to HTTP requests using raw sockets, or a high-level approach using the <code>urequests</code> library."
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a>, §3.8</cite>
+  </blockquote>
+
+  <h2><code>urequests</code> — the same thing, wrapped</h2>
+  <pre><code>import urequests
+
+r = urequests.get("http://httpbin.org/json")
+print(r.status_code)
+print(r.json())
+r.close()</code></pre>
+  <table>
+    <thead><tr><th>Attribute / method</th><th>What it gives you</th></tr></thead>
+    <tbody>
+      <tr><td><code>r.status_code</code></td><td>HTTP status as an int (<code>200</code>, <code>404</code>, ...)</td></tr>
+      <tr><td><code>r.content</code></td><td>Raw response body, bytes</td></tr>
+      <tr><td><code>r.text</code></td><td>Response body decoded as a string</td></tr>
+      <tr><td><code>r.json()</code></td><td>Body parsed as JSON — limited support, but covers plain objects/arrays</td></tr>
+      <tr><td><code>r.close()</code></td><td><strong>Required.</strong> See below.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="sidenote"><strong>Always call <code>r.close()</code>:</strong> per the guide — "if you do not, the object will not be garbage-collected, and if the request is being made inside a loop this will quickly lead to a crash." A departure board polls in a loop forever, so this isn't optional cleanup, it's the difference between running for a day and running for five minutes.</div>
+
+  <h2>Known limitations</h2>
+  <ul>
+    <li>HTTPS works, but SSL certificate verification is currently disabled.</li>
+    <li>Redirects are followed automatically.</li>
+    <li>JSON support is limited — fine for plain objects/arrays, don't expect edge-case spec compliance.</li>
+  </ul>
+
+  <h2>Reconnecting after a failed request (pattern, not yet built)</h2>
+  <pre><code>try:
+    response = requests.get(url)
+    ...
+    response.close()
+except:
+    if wlan.status() &lt; 0 or wlan.status() &gt;= 3:
+        wlan.disconnect()
+        wlan.connect(ssid, password)</code></pre>
+  <p>Generalizes the lesson-3 status-poll habit: don't just poll at startup, poll again whenever a request fails, and only reconnect if the link actually dropped.</p>
+
+  <h2>Installing <code>urequests</code></h2>
+  <pre><code>uv run mpremote mip install urequests</code></pre>
+  <p>Runs on your computer, not the Pico — <code>mip</code> fetches the package over your machine's network connection, then copies the resulting files onto the device over USB. The device doesn't need its own Wi-Fi connection yet for this step.</p>
+
+  <nav class="lesson-links">
+    From <a href="../lessons/0004-first-http-request.html">Lesson 4 — Your first HTTP request</a>.
+  </nav>
+
+</div>
+</body>
+</html>

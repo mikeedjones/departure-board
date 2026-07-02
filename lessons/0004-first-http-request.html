@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 4 — Your first HTTP request</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Lesson 4 · HTTP &amp; urequests</div>
+    <h1>Your first HTTP request</h1>
+  </header>
+
+  <p>Lesson 3 got the board onto the network — associated, DHCP'd, holding a real IP. That connection is just a wire now; nothing has flowed over it yet. This lesson makes the first thing flow: a plain HTTP GET, out and back, with a JSON body parsed on the other end. That's the exact mechanism the departure board will eventually poll on a timer — this lesson proves it works before wiring it to a real transit API.</p>
+
+  <h2>Two ways to ask for a page</h2>
+  <blockquote class="citation">
+    "You can take a low-level approach to HTTP requests using raw sockets, or a high-level approach using the <code>urequests</code> library."
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a>, §3.8</cite>
+  </blockquote>
+  <p>Sockets show you what HTTP actually <em>is</em>. <code>urequests</code> is what you'll actually use. Worth seeing both, in that order.</p>
+
+  <h2>Raw sockets — HTTP with nothing hidden</h2>
+  <pre><code># Get IP address for google.com
+import socket
+ai = socket.getaddrinfo("google.com", 80)
+addr = ai[0][-1]
+
+# Create a socket and make a HTTP request
+s = socket.socket()
+s.connect(addr)
+s.send(b"GET / HTTP/1.0\r\n\r\n")
+
+# Print the response
+print(s.recv(512))</code></pre>
+  <blockquote class="citation">
+    §3.8.1 "HTTP with sockets"
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a></cite>
+  </blockquote>
+  <p><code>getaddrinfo</code> is DNS — turning <code>"google.com"</code> into an IP address, the same lookup your laptop does. <code>socket.socket()</code> + <code>connect(addr)</code> is the TCP handshake, same as SPI's chip-select-then-clock but over a network instead of a bus. Then <code>send()</code> writes literal bytes — <code>b"GET / HTTP/1.0\r\n\r\n"</code> <em>is</em> the entire HTTP request. No object, no framework: a method, a path, a version, and a blank line.</p>
+
+  <div class="sidenote"><strong>Why the double <code>\r\n</code>:</strong> HTTP headers are one per line, each ending <code>\r\n</code>. A request can have zero headers, so the protocol needs an unambiguous "that's all of them" marker — a line that's empty. Second <code>\r\n</code> with nothing before it is exactly that. <code>recv(512)</code> then hands back whatever the server sends: status line, headers, and body, all as one undifferentiated blob of bytes. Nothing parses it for you at this layer.</div>
+
+  <div class="quiz" data-answer="end of headers|end of the headers|end of the request headers|no more headers|blank line">
+    <div class="q">In <code>b"GET / HTTP/1.0\r\n\r\n"</code>, what does that second, empty <code>\r\n</code> line signal to the server?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2><code>urequests</code> — the same thing, wrapped</h2>
+  <blockquote class="citation">
+    "It is much simpler to use the <code>urequests</code> library to make an HTTP connection."
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a>, §3.8.2</cite>
+  </blockquote>
+  <pre><code>import urequests
+r = urequests.get("http://www.google.com")
+print(r.content)
+r.close()</code></pre>
+  <p>Same DNS lookup, same socket, same raw bytes underneath — <code>urequests</code> just does all of it and hands you back a response object instead of a byte soup. It follows redirects automatically, and it parses JSON for you if you ask:</p>
+  <pre><code>&gt;&gt;&gt; r = urequests.get("http://date.jsontest.com")
+&gt;&gt;&gt; r.json()
+{'milliseconds_since_epoch': 1652188199441, 'date': '05-10-2022', 'time': '01:09:59 PM'}</code></pre>
+  <p>That exact endpoint from the guide is dead now — <code>date.jsontest.com</code> doesn't resolve any more. The workbook below uses <code>httpbin.org/json</code> instead, which is still alive. Public test APIs rot; worth knowing before assuming a tutorial's URL still works.</p>
+
+  <div class="sidenote">
+    <strong>Must call <code>.close()</code>:</strong> straight from the guide — <strong>"You must close the returned response object after making a request using the <code>urequests</code> library using <code>response.close()</code>. If you do not, the object will not be garbage-collected, and if the request is being made inside a loop this will quickly lead to a crash."</strong> A departure board polls forever. Skipping <code>.close()</code> is the difference between running for a day and running for five minutes before it falls over.
+  </div>
+
+  <div class="quiz" data-answer="close|close()|.close()|response.close()|r.close()">
+    <div class="q">What must you call on every <code>urequests</code> response object once you're done with it, especially inside a poll loop?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>Looking ahead: reconnecting after a failed request</h2>
+  <p>§3.8.3 extends lesson 3's connect-and-poll habit past startup: wrap the request in <code>try</code>/<code>except</code>, and on failure, re-check <code>wlan.status()</code> before deciding whether to reconnect. Not built into this lesson's workbook — one request, once, is enough to prove the mechanism — but it's captured in the <a href="../reference/http-requests.html">reference doc</a> for when the polling loop gets built for real.</p>
+
+  <h2>Step — install <code>urequests</code>, make the request</h2>
+  <p><code>urequests</code> isn't guaranteed to already be on the device's filesystem, so install it first — this runs on your computer, fetches over your machine's network, then copies the result to the Pico over USB (the device doesn't need Wi-Fi for this step):</p>
+  <pre><code>uv run mpremote mip install urequests</code></pre>
+  <p>The workbook's <code>main.py</code> is lesson 3's connect sequence, unchanged, plus one HTTP GET against <code>http://httpbin.org/json</code> — a small, stable, no-auth JSON test endpoint — with the response parsed and closed:</p>
+  <pre><code>url = "http://httpbin.org/json"
+response = urequests.get(url)
+try:
+    print(f"status = {response.status_code}")
+    body = response.json()
+    print(f"slideshow title = {body['slideshow']['title']}")
+finally:
+    response.close()</code></pre>
+  <p>The <code>try</code>/<code>finally</code> is deliberate: it guarantees <code>.close()</code> runs even if <code>.json()</code> or the dict lookup blows up, not just on the happy path — the same "don't just trust the happy path" instinct from lesson 3's status poll, applied here.</p>
+  <p>Deploy and reset:</p>
+  <pre><code>uv run mpremote cp workbooks/lesson-0004-first-http-request/firmware/config.py :config.py
+uv run mpremote cp workbooks/lesson-0004-first-http-request/firmware/main.py :main.py
+uv run mpremote reset</code></pre>
+  <div class="win-box">
+    <div class="label">Win condition</div>
+    The REPL prints <code>connected — ip = ...</code>, then <code>status = 200</code>, then <code>slideshow title = Sample Slide Show</code>.
+  </div>
+
+  <div class="sidenote">
+    <strong>vs. Arduino/C:</strong> this exact guide has no C-side equivalent of §3.8 — the C SDK chapter stops at "getting online," no HTTP client section. There's no <code>urequests.get()</code> analogue in the Pico SDK at all; you'd reach for lwIP's own HTTP client code directly, callback-driven rather than a single blocking-looking call. <code>urequests</code> buying you a one-line GET is a real, not cosmetic, MicroPython advantage here.
+  </div>
+
+  <h2>Primary source</h2>
+  <p><a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a> (Raspberry Pi Ltd), §3.8 "Making HTTP requests" — pages 19-21, all three subsections (sockets, urequests, robust connections).</p>
+
+  <h2>Reference</h2>
+  <ul>
+    <li><a href="../reference/http-requests.html">HTTP requests from MicroPython cheat sheet</a></li>
+  </ul>
+
+  <p class="ask-teacher">Questions about any of this — why SSL verification is disabled by default, what "limited JSON support" actually breaks on, why the C SDK doesn't get the same one-liner — just ask.</p>
+
+  <nav class="lesson-links">
+    Previous: <a href="0003-joining-a-network.html">Lesson 3 — Turning on Wi-Fi, joining your network</a>.
+    Workbook: <code>workbooks/lesson-0004-first-http-request/</code>
+  </nav>
+
+</div>
+</body>
+</html>
