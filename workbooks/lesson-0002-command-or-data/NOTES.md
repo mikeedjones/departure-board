@@ -1,0 +1,2 @@
+- Watch your pin lines.
+- MISO MOSI look the same if you're dyslexic. Read carefully which is which and figure out what they do.
