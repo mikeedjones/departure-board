@@ -226,3 +226,6 @@ __marimo__/
 !firmware/lib/**
 firmware/config.py
 .mpy_cache/
+
+# Scratchpad for experimentation
+scratch/
