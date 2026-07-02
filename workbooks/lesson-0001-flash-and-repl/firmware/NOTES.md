@@ -1,0 +1,2 @@
+- My device was already in the BOOTSEL mode when I connected it to my computer and appeared as a USB drive called RP2350. Not sure why.
+- I was able to flash the firmware using rsync, finder kept crashing when I tried to copy the files over.
