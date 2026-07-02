@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 0 — The parts kit</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Lesson 0 · The parts kit</div>
+    <h1>What's actually in the box, before you wire anything</h1>
+  </header>
+
+  <p>
+    Before touching a breadboard — not the point of this lesson, you've done
+    that plenty — it's worth knowing what's actually inside the two active
+    components in this kit, and specifically what changed in the newer
+    silicon you're holding versus the boards most tutorials online still
+    assume.
+  </p>
+
+  <div class="win-box">
+    <div class="label">The win, in one sentence</div>
+    You'll know what's silicon-level different about the "2 W" in your
+    board's name, be able to find the wireless chip on the pinout diagram,
+    and know <em>how</em> it talks to the main chip — which turns out to
+    matter well before you write a line of Wi-Fi code.
+  </div>
+
+  <h2>The parts</h2>
+  <table>
+    <thead><tr><th>Part</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>Raspberry Pi Pico 2&nbsp;W</td><td>The microcontroller board — everything below is about this</td></tr>
+      <tr><td>240×320 SPI TFT, ILI9341-class controller</td><td>The display — covered at the protocol level in <a href="0002-command-or-data.html">Lesson 2</a></td></tr>
+      <tr><td>Breadboard + jumper wires</td><td>Prototyping the wiring in the README's table — nothing new here for you</td></tr>
+    </tbody>
+  </table>
+
+  <h2>What's actually on the Pico 2 W</h2>
+  <p>
+    The board is built around the <strong>RP2350</strong> — a genuinely
+    different chip from the RP2040 that older "Pico W" boards and most
+    existing tutorials use, not just a speed bump:
+  </p>
+  <blockquote class="citation">
+    "Dual Cortex-M33 or RISC-V Hazard3 cores clocked at up to 150MHz... 520&nbsp;kB
+    multi-bank high performance SRAM... External Quad-SPI flash with eXecute
+    In Place (XIP) and 16kB on-chip cache... RP2350 microcontroller with
+    4&nbsp;MB of flash memory."
+    <cite><a href="https://pip.raspberrypi.com/documents/RP-008304-DS-pico-2-w-datasheet.pdf" target="_blank" rel="noopener">Raspberry Pi Pico 2 W Datasheet</a>, Ch.1 "About Pico 2 W"</cite>
+  </blockquote>
+  <p>
+    The "Cortex-M33 <em>or</em> RISC-V Hazard3" part is the interesting bit:
+    the RP2350 can run either instruction set, selectable at boot. MicroPython
+    on Pico 2&nbsp;W runs the Arm cores — the RISC-V option matters mainly if
+    you ever drop to C/the Pico SDK, which per the mission you're
+    deliberately not doing here. Worth knowing it exists; not worth chasing
+    further right now.
+  </p>
+
+  <h2>The wireless chip — and why it already matters</h2>
+  <p>
+    The "W" is a separate chip, not a feature baked into the RP2350 itself:
+  </p>
+  <blockquote class="citation">
+    "Pico 2 W has an on-board 2.4GHz wireless interface using an Infineon
+    CYW43439... The wireless interface is connected via <strong>SPI</strong>
+    to the RP2350."
+    <cite><a href="https://pip.raspberrypi.com/documents/RP-008304-DS-pico-2-w-datasheet.pdf" target="_blank" rel="noopener">Raspberry Pi Pico 2 W Datasheet</a>, Ch.1 "About Pico 2 W"</cite>
+  </blockquote>
+  <p>
+    That's not a coincidence worth skipping past: the same bus you just
+    traced command-by-command in <a href="0002-command-or-data.html">Lesson
+    2</a> — CS, SCK, a data line, one chip talking to another — is exactly
+    how the RP2350 talks to its own Wi-Fi radio internally. When the mission
+    gets to fetching live departure data, <code>network.WLAN</code> will look
+    like a totally different API on the surface, but underneath it's issuing
+    SPI transactions to the CYW43439 the same shape as
+    <code>write_cmd_mpy</code>/<code>write_data_mpy</code> issues to the
+    display. You won't be starting from zero a second time.
+  </p>
+
+  <div class="sidenote">
+    <strong>Board name check:</strong> a plain "Pico 2" (no W) is the same
+    RP2350 chip with no CYW43439 and no wireless — cheaper, but a dead end
+    for this mission. Worth a glance at the board silkscreen to confirm you
+    actually have the W variant before going further.
+  </div>
+
+  <h2>Check it stuck</h2>
+  <div class="quiz" data-answer="cyw43439|infineon cyw43439|the cyw43439">
+    <div class="q">Which chip provides the Wi-Fi/Bluetooth radio — separate from the RP2350 itself?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+  <div class="quiz" data-answer="spi">
+    <div class="q">What bus does that wireless chip use to talk to the RP2350 — the same one driving your display?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>Primary source</h2>
+  <p>
+    <a href="https://pip.raspberrypi.com/documents/RP-008304-DS-pico-2-w-datasheet.pdf" target="_blank" rel="noopener">Raspberry Pi Pico 2 W Datasheet</a>
+    — Chapter 1 "About Pico 2 W" covers everything above in a couple of
+    pages, plus the full pinout diagram showing exactly where the CYW43439
+    sits relative to the RP2350's own GPIO.
+  </p>
+
+  <nav class="lesson-links">
+    Reference: <a href="../reference/pico-2-w-specs.html">Pico 2 W quick specs</a>.
+    Next: <a href="0001-firmware-tour.html">Lesson 1 — A tour of firmware/, before you've flashed anything</a>.
+  </nav>
+
+  <p class="ask-teacher">
+    Anything here unclear — the M33/Hazard3 split, why the wireless chip
+    isn't just "part of" the RP2350? Ask the agent, it's your teacher for
+    this workspace.
+  </p>
+
+</div>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

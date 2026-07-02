@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — MicroPython flash vs. deploy</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Reference · Toolchain</div>
+    <h1>MicroPython on the Pico: flash vs. deploy</h1>
+  </header>
+
+  <p>Compressed from <a href="../lessons/0001-firmware-tour.html">Lesson 1</a>. The one thing this exists to stop you forgetting: these are two <em>different</em> operations, not one "upload."</p>
+
+  <h2>The two-layer model</h2>
+  <table>
+    <thead><tr><th></th><th>What</th><th>How often</th><th>How</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Flash the interpreter</strong></td>
+        <td>MicroPython runtime itself, a full <code>.uf2</code> image</td>
+        <td>Rarely — once, or on version upgrades</td>
+        <td>Hold <strong>BOOTSEL</strong> while plugging in USB → drive mounts → drop the <code>.uf2</code> on it</td>
+      </tr>
+      <tr>
+        <td><strong>Deploy your code</strong></td>
+        <td>Plain <code>.py</code> files on the interpreter's filesystem</td>
+        <td>Every code change</td>
+        <td><code>scripts/deploy.sh</code> (wraps <code>mpremote</code>) — no BOOTSEL</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Boot sequence, every power-up / soft-reset</h2>
+  <pre><code>boot.py   → one-off init (runs once, every boot)
+main.py   → your program (runs once, top to bottom; no auto-loop)</code></pre>
+  <blockquote class="citation">
+    "If <code>boot.py</code> is found then it is executed... a file named
+    <code>main.py</code>... is executed next."
+    <cite><a href="https://docs.micropython.org/en/latest/reference/reset_boot.html" target="_blank" rel="noopener">MicroPython docs — Reset and boot</a></cite>
+  </blockquote>
+  <p>Arduino equivalent: <code>boot.py</code> ≈ <code>setup()</code>, <code>main.py</code> ≈ <code>loop()</code> — except <code>main.py</code> does not repeat automatically, and there's no shared runtime state between the two beyond the filesystem.</p>
+
+  <h2>Useful mpremote commands</h2>
+  <pre><code>mpremote                      # open a REPL on the board (Ctrl-] to exit)
+mpremote cp file.py :file.py  # copy one file to the device
+mpremote cp -r dir/ :dir/     # copy a directory
+mpremote reset                # soft-reset (re-runs boot.py -> main.py)
+mpremote fs ls :              # list files on the device</code></pre>
+
+  <h2>Why lib/ is vendored, not mip-installed</h2>
+  <p><a href="https://docs.micropython.org/en/latest/reference/packages.html" target="_blank" rel="noopener"><code>mip</code></a> is MicroPython's package manager (pip's counterpart). This project copies third-party drivers straight into <code>firmware/lib/</code> instead, so the exact version is committed and reviewable rather than fetched fresh on every deploy.</p>
+
+  <nav class="lesson-links">
+    From <a href="../lessons/0001-firmware-tour.html">Lesson 1 — A tour of firmware/</a>.
+  </nav>
+
+</div>
+</body>
+</html>

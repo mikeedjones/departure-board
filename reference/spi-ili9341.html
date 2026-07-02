@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — SPI &amp; the ILI9341</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Reference · SPI &amp; the ILI9341</div>
+    <h1>SPI wires, and how the ILI9341 tells command from data</h1>
+  </header>
+
+  <p>Compressed from <a href="../lessons/0002-command-or-data.html">Lesson 2</a>.</p>
+
+  <h2>SPI wire glossary</h2>
+  <table>
+    <thead><tr><th>Wire</th><th>Meaning</th><th>On our board</th></tr></thead>
+    <tbody>
+      <tr><td><code>SCK</code></td><td>Serial clock, driven by the host</td><td>GP18</td></tr>
+      <tr><td><code>MOSI</code></td><td>Master Out Slave In — host → peripheral data</td><td>GP19</td></tr>
+      <tr><td><code>MISO</code></td><td>Master In Slave Out — peripheral → host data</td><td>not wired — display is write-only</td></tr>
+      <tr><td><code>CS</code></td><td>Chip select — low while a transaction targets this device</td><td>GP17</td></tr>
+      <tr><td><code>D/CX</code> ("DC")</td><td>ILI9341-specific: high = data byte, low = command byte</td><td>GP20</td></tr>
+    </tbody>
+  </table>
+  <blockquote class="citation">
+    "[SPI] uses four logic signals... to support full duplex communication."
+    <cite><a href="https://en.wikipedia.org/wiki/Serial_Peripheral_Interface" target="_blank" rel="noopener">Wikipedia — SPI</a></cite>
+  </blockquote>
+
+  <h2>3-line vs. 4-line serial (ILI9341 §7.1.8, p.33)</h2>
+  <table>
+    <thead><tr><th>Mode</th><th>Command/data signaling</th><th>Wires</th></tr></thead>
+    <tbody>
+      <tr><td>3-line</td><td>9th bit before every byte, same data line</td><td>CS, SCK, SDA</td></tr>
+      <tr><td>4-line <em>(ours)</em></td><td>Dedicated D/CX pin held high/low for the whole byte</td><td>CS, SCK, SDA, D/CX</td></tr>
+    </tbody>
+  </table>
+
+  <h2>The driver's core primitive</h2>
+  <pre><code>def write_cmd_mpy(self, command, *args):
+    self.dc(0); self.cs(0)          # DC low = command
+    self.spi.write(bytearray([command]))
+    self.cs(1)
+    if args: self.write_data(bytearray(args))
+
+def write_data_mpy(self, data):
+    self.dc(1); self.cs(0)          # DC high = data
+    self.spi.write(data)
+    self.cs(1)</code></pre>
+  <p>Every driver call — <code>clear()</code>, <code>draw_text()</code>, everything — bottoms out here: flip DC, toggle CS, raw <code>spi.write()</code>.</p>
+
+  <div class="sidenote">
+    <strong>vs. Arduino:</strong> the DC-toggle trick is identical. What differs is CS is toggled by hand around every single write here — MicroPython's <code>machine.SPI</code> has no <code>beginTransaction()</code>/<code>endTransaction()</code> wrapper.
+  </div>
+
+  <nav class="lesson-links">
+    From <a href="../lessons/0002-command-or-data.html">Lesson 2 — Command or data?</a>.
+  </nav>
+
+</div>
+</body>
+</html>
