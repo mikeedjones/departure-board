@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — Wi-Fi station mode</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Reference · Wi-Fi &amp; network.WLAN</div>
+    <h1>Joining a network in station mode</h1>
+  </header>
+
+  <p>Compressed from <a href="../lessons/0003-joining-a-network.html">Lesson 3</a>.</p>
+
+  <h2>The connect sequence</h2>
+  <pre><code>import network
+
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+wlan.connect(ssid, password)
+
+while max_wait > 0:
+    status = wlan.status()
+    if status &lt; 0 or status &gt;= 3:
+        break
+    max_wait -= 1
+    time.sleep(1)
+
+if wlan.status() != 3:
+    raise RuntimeError("network connection failed")
+
+ip, subnet, gateway, dns = wlan.ifconfig()</code></pre>
+  <blockquote class="citation">
+    "We're using the <code>network</code> library to talk to the wireless hardware."
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a>, §3.6</cite>
+  </blockquote>
+
+  <h2>STA_IF vs. AP_IF</h2>
+  <table>
+    <thead><tr><th>Interface</th><th>Role</th><th>Used here?</th></tr></thead>
+    <tbody>
+      <tr><td><code>network.STA_IF</code></td><td>Station — join an existing access point as a client</td><td>Yes</td></tr>
+      <tr><td><code>network.AP_IF</code></td><td>Access point — the board <em>becomes</em> the AP other devices join</td><td>Not used in this project</td></tr>
+    </tbody>
+  </table>
+
+  <h2>CYW43 link status codes</h2>
+  <table>
+    <thead><tr><th>Value</th><th>Constant</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>0</code></td><td><code>CYW43_LINK_DOWN</code></td><td>No connection, no activity</td></tr>
+      <tr><td><code>1</code></td><td><code>CYW43_LINK_JOIN</code></td><td>Associated with the AP, no IP yet</td></tr>
+      <tr><td><code>2</code></td><td><code>CYW43_LINK_NOIP</code></td><td>Joined, waiting on DHCP for an IP</td></tr>
+      <tr><td><code>3</code></td><td><code>CYW43_LINK_UP</code></td><td>Connected — has an IP</td></tr>
+      <tr><td><code>-1</code></td><td><code>CYW43_LINK_FAIL</code></td><td>Failed, other reason</td></tr>
+      <tr><td><code>-2</code></td><td><code>CYW43_LINK_NONET</code></td><td>No matching access point found</td></tr>
+      <tr><td><code>-3</code></td><td><code>CYW43_LINK_BADAUTH</code></td><td>Wrong password / auth rejected</td></tr>
+    </tbody>
+  </table>
+  <p>The values are the CYW43 driver's own enum, passed straight through <code>wlan.status()</code> — the poll loop's <code>status &lt; 0 or status &gt;= 3</code> check is really "stop looping once we're either definitely done (3) or definitely dead (negative)."</p>
+
+  <h2>Useful <code>wlan.config()</code> keys (station mode)</h2>
+  <pre><code>wlan.config('mac')       # bytes — needs active(True) first, loads firmware
+wlan.config('channel')
+wlan.config('essid')
+wlan.config('txpower')</code></pre>
+
+  <h2>If it won't associate on a known-good network</h2>
+  <p>The wireless country defaults to a conservative worldwide-safe channel set, which can exclude channels your router actually uses:</p>
+  <pre><code>import rp2
+rp2.country('GB')   # ISO 3166-1 alpha-2, set to your own country</code></pre>
+
+  <h2>vs. the C SDK</h2>
+  <p>The same sequence in C folds country + station-mode + connect-with-timeout into three calls with a blocking timeout parameter, rather than a poll loop you write yourself:</p>
+  <pre><code>cyw43_arch_init_with_country(CYW43_COUNTRY_UK);
+cyw43_arch_enable_sta_mode();
+cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000);</code></pre>
+
+  <nav class="lesson-links">
+    From <a href="../lessons/0003-joining-a-network.html">Lesson 3 — Turning on Wi-Fi, joining your network</a>.
+  </nav>
+
+</div>
+</body>
+</html>

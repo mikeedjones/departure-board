@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 3 — Turning on Wi-Fi</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Lesson 3 · Wi-Fi &amp; network.WLAN</div>
+    <h1>Turning on Wi-Fi, and joining your network</h1>
+  </header>
+
+  <p>Screen's proven. Now the second half of the mission starts: getting this board on the network so it can eventually pull real departure data. This lesson is deliberately narrow — just <code>network.WLAN</code>, powering up the radio, and joining an access point as a client. No HTTP yet, no JSON, just the handshake that everything else sits on top of.</p>
+
+  <div class="sidenote"><strong>Same chip as the LED:</strong> Lesson 1's LED quirk — <code>Pin("LED")</code> routing through the CYW43439 instead of the RP2350 — was foreshadowing this. The CYW43439 is the wireless chip; the RP2350 talks to it over its own internal SPI link. Wi-Fi and the on-board LED are the same piece of silicon, which is why both needed the same underlying firmware brought up before they'd respond.</div>
+
+  <h2>Station mode vs. access point mode</h2>
+  <p><code>network.WLAN</code> can put the CYW43439 into either of two roles. This project only ever needs one of them:</p>
+  <table>
+    <thead><tr><th>Interface</th><th>Role</th><th>Used here?</th></tr></thead>
+    <tbody>
+      <tr><td><code>network.STA_IF</code></td><td>Station — join an existing access point as a client, same as a laptop joining Wi-Fi</td><td>Yes</td></tr>
+      <tr><td><code>network.AP_IF</code></td><td>Access point — the board <em>becomes</em> the Wi-Fi network other devices join</td><td>No — out of scope</td></tr>
+    </tbody>
+  </table>
+
+  <h2>The connect sequence</h2>
+  <p>Straight from the Pico W-series networking guide:</p>
+  <pre><code>import network
+
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+wlan.connect('Wireless Network', 'The Password')
+
+while not wlan.isconnected() and wlan.status() >= 0:
+    print("Waiting to connect:")
+    time.sleep(1)
+
+print(wlan.ifconfig())</code></pre>
+  <blockquote class="citation">
+    "We're using the <code>network</code> library to talk to the wireless hardware."
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a>, §3.6</cite>
+  </blockquote>
+  <p>Three calls do all the work. <code>WLAN(network.STA_IF)</code> just constructs a handle — nothing happens on the chip yet. <code>active(True)</code> is the one that actually loads the CYW43439's Wi-Fi firmware and powers the radio; the guide notes elsewhere that you have to call it before even reading the chip's MAC address, because nothing on the chip responds until firmware is loaded. <code>connect(ssid, password)</code> kicks off association and returns immediately — it doesn't block until you're online, it just tells the chip to start trying.</p>
+
+  <div class="sidenote"><strong>Non-blocking is the whole reason for the poll loop:</strong> because <code>connect()</code> returns instantly, your code has to ask the chip "are we there yet?" itself, in a loop, checking a status value each time. There's no callback, no async/await here — it's a plain <code>while</code> loop with a manual counter.</div>
+
+  <h2>Reading the status codes</h2>
+  <p>The workbook's version (below) polls <code>wlan.status()</code> instead of <code>isconnected()</code>, because the numeric status distinguishes <em>why</em> it isn't connected yet. The values are the CYW43 driver's own link-status enum, passed straight through to MicroPython:</p>
+  <table>
+    <thead><tr><th>Value</th><th>Constant</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>0</code></td><td><code>CYW43_LINK_DOWN</code></td><td>No connection, no activity</td></tr>
+      <tr><td><code>1</code></td><td><code>CYW43_LINK_JOIN</code></td><td>Associated with the AP, no IP yet</td></tr>
+      <tr><td><code>2</code></td><td><code>CYW43_LINK_NOIP</code></td><td>Joined, waiting on DHCP for an IP</td></tr>
+      <tr><td><code>3</code></td><td><code>CYW43_LINK_UP</code></td><td>Connected — has an IP</td></tr>
+      <tr><td><code>-1</code></td><td><code>CYW43_LINK_FAIL</code></td><td>Failed, other reason</td></tr>
+      <tr><td><code>-2</code></td><td><code>CYW43_LINK_NONET</code></td><td>No matching access point found</td></tr>
+      <tr><td><code>-3</code></td><td><code>CYW43_LINK_BADAUTH</code></td><td>Wrong password, auth rejected</td></tr>
+    </tbody>
+  </table>
+  <blockquote class="citation">
+    "The values returned by the <code>wlan.status()</code> call are defined in the CYW43 wireless driver, and are passed directly through to user-code."
+    <cite>Raspberry Pi Ltd, <a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a>, §3.6.1</cite>
+  </blockquote>
+  <p>That's why the more robust poll loop (also in the guide, and what the workbook uses) checks <code>status &lt; 0 or status &gt;= 3</code> to decide when to stop: negative means it's dead and won't recover on its own, <code>3</code> means success, and <code>0</code>/<code>1</code>/<code>2</code> are all "still in progress, keep waiting."</p>
+
+  <div class="quiz" data-answer="2|noip|cyw43_link_noip">
+    <div class="q">Your board has successfully associated with the router and negotiated encryption, but hasn't received an IP address from DHCP yet. What status code is that?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>Step — fill in credentials, deploy</h2>
+  <p>The workbook has <code>firmware/config.py</code> (gitignored — same pattern as lesson 2's pin config, just now holding a secret instead of pin numbers) and <code>firmware/main.py</code>. Open <code>config.py</code> and replace the two placeholder values with your actual network name and password:</p>
+  <pre><code>WIFI_SSID = "your-network-name"
+WIFI_PASSWORD = "your-password"</code></pre>
+  <p>Then deploy both files and watch the REPL:</p>
+  <pre><code>uv run mpremote cp workbooks/lesson-0003-joining-a-network/firmware/config.py :config.py
+uv run mpremote cp workbooks/lesson-0003-joining-a-network/firmware/main.py :main.py
+uv run mpremote reset</code></pre>
+  <div class="win-box">
+    <div class="label">Win condition</div>
+    The REPL prints <code>connected — ip = ...</code> with a real IP address on your home network.
+  </div>
+
+  <div class="quiz" data-answer="active|active(true)|wlan.active(true)">
+    <div class="q">Which single method call is the one that actually powers up the CYW43439's Wi-Fi firmware — distinct from constructing the WLAN handle or calling connect()?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <div class="sidenote"><strong>If it won't associate on a network you know is good:</strong> the wireless country defaults to an unset, conservative worldwide-safe channel set, which can exclude channels your specific router uses. <code>import rp2; rp2.country('GB')</code> (using your own country's code) is the guide's fix if this ever bites — not needed here since it connected, but worth knowing before it's the reason something silently fails to join later.</div>
+
+  <div class="sidenote">
+    <strong>vs. Arduino/C:</strong> the equivalent C SDK sequence folds country, station-mode, and connect-with-timeout into three explicit calls, with the timeout as a parameter rather than a loop you write:
+    <pre><code>cyw43_arch_init_with_country(CYW43_COUNTRY_UK);
+cyw43_arch_enable_sta_mode();
+cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000);</code></pre>
+    MicroPython gives you the same three ideas — country, mode, connect — but as separate, inspectable steps: <code>active(True)</code> does what <code>cyw43_arch_init_with_country()</code> + <code>enable_sta_mode()</code> do together, and the poll loop replaces the built-in timeout with one you control yourself.
+  </div>
+
+  <h2>Primary source</h2>
+  <p><a href="https://pip.raspberrypi.com/documents/RP-008257-DS" target="_blank" rel="noopener">Connecting to the Internet with Raspberry Pi Pico W-series</a> (Raspberry Pi Ltd), §3.6 "Connecting to a wireless network" — read straight through, it's four pages and covers exactly this handshake plus the status codes table.</p>
+
+  <h2>Reference</h2>
+  <ul>
+    <li><a href="../reference/wifi-station-mode.html">Wi-Fi station mode cheat sheet</a></li>
+  </ul>
+
+  <p class="ask-teacher">Questions about any of this — why <code>connect()</code> doesn't block, what power-save mode does to responsiveness, why the C SDK needs a country code up front but MicroPython lets you skip it — just ask.</p>
+
+  <nav class="lesson-links">
+    Previous: <a href="0002-command-or-data.html">Lesson 2 — Command or data?</a>.
+    Workbook: <code>workbooks/lesson-0003-joining-a-network/</code>
+  </nav>
+
+</div>
+</body>
+</html>

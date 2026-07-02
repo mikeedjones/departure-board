@@ -1,0 +1,3 @@
+# Lesson 3 complete: joined the home network, debugged SSID case-sensitivity independently
+
+Connected the Pico 2 W to the home Wi-Fi network via `network.WLAN(STA_IF)`. Diagnosed and fixed a real connection failure independently — a mismatched-case SSID — which demonstrates the status-code poll loop was understood well enough to use as an actual debugging tool, not just copied. Also tuned `time.sleep(1)` up to `time.sleep(5)` in the poll loop on their own initiative, correctly treating it as a free parameter rather than a fixed part of the mechanism. No misconception to correct here — good sign for moving into HTTP/JSON work next, where the same "read the status, don't just trust the happy path" habit will matter for error handling and reconnect logic.

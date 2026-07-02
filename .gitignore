@@ -224,7 +224,7 @@ __marimo__/
 #   the vendored display driver we commit under firmware/lib/.
 !firmware/lib/
 !firmware/lib/**
-firmware/config.py
+**/firmware/config.py
 .mpy_cache/
 
 # Scratchpad for experimentation
