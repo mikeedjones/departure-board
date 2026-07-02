@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Copy firmware/ onto the Pico's filesystem over USB and soft-reset it.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+if ! command -v mpremote >/dev/null 2>&1; then
+  echo "mpremote not found. Install it with: uv sync" >&2
+  exit 1
+fi
+
+if [ ! -f firmware/config.py ]; then
+  echo "firmware/config.py not found — copying firmware/config.example.py as a starting point."
+  echo "Edit it with your Wi-Fi and RTT.io credentials before running this again."
+  cp firmware/config.example.py firmware/config.py
+  exit 1
+fi
+
+echo "Creating device directories..."
+mpremote mkdir :lib >/dev/null 2>&1 || true
+
+echo "Copying firmware to device..."
+while IFS= read -r -d '' file; do
+  rel="${file#firmware/}"
+  echo "  $rel"
+  mpremote cp "$file" ":$rel"
+done < <(find firmware -type f -print0)
+
+echo "Soft-resetting device..."
+mpremote reset
+
+echo "Done. Watch serial output with: mpremote"
