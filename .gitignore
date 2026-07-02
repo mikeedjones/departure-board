@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Pico firmware (device-side MicroPython project)
+#   The generic "lib/" rule above (for Python venvs) would otherwise swallow
+#   the vendored display driver we commit under firmware/lib/.
+!firmware/lib/
+!firmware/lib/**
+firmware/config.py
+.mpy_cache/
