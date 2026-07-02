@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — RTT.io departures</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Reference · RTT.io API</div>
+    <h1>RTT.io (Realtime Trains) departures cheat sheet</h1>
+  </header>
+
+  <p>Compressed from <a href="../lessons/0005-departure-board.html">Lesson 5</a>. Full spec: <a href="https://github.com/realtimetrains/api-specification" target="_blank" rel="noopener">realtimetrains/api-specification</a>.</p>
+
+  <h2>Auth — two-step, token has a short lifetime</h2>
+  <ol>
+    <li>You hold a long-life <strong>refresh token</strong> from <a href="https://api-portal.rtt.io" target="_blank" rel="noopener">api-portal.rtt.io</a>.</li>
+    <li><code>GET https://data.rtt.io/api/get_access_token</code>, with the refresh token as <code>Authorization: Bearer</code>, returns a short-life <strong>access token</strong> (~20 min) plus a <code>validUntil</code>.</li>
+    <li>Use the access token as <code>Authorization: Bearer</code> on every other call.</li>
+  </ol>
+  <div class="sidenote">No synced wall clock on the Pico — track expiry with <code>time.ticks_ms()</code> / <code>time.ticks_diff()</code> against a conservative fixed interval (e.g. 15 min), not against <code>validUntil</code>. Also force-refresh once on any <code>401</code>.</div>
+
+  <h2>Endpoints used here</h2>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /api/get_access_token</code></td><td>Exchange refresh token for access token</td></tr>
+      <tr><td><code>GET /rtt/location?code=gb-nr:XXX&amp;filterTo=gb-nr:YYY</code></td><td>Departures summary from station <code>XXX</code>, filtered to destination <code>YYY</code> (omit <code>filterTo</code> for all destinations)</td></tr>
+      <tr><td><code>GET /rtt/service?uniqueIdentity=...</code></td><td>Full per-stop journey for one service — more detail than the location summary, e.g. every calling point's own platform</td></tr>
+    </tbody>
+  </table>
+  <p>Codes are namespace-prefixed: a 3-letter CRS code like <code>WAT</code> becomes <code>gb-nr:WAT</code> in a query.</p>
+
+  <h2>Response shape → board fields</h2>
+  <p>RTT.io's JSON is camelCase; normalize to snake_case at the edge, once, in one function:</p>
+  <table>
+    <thead><tr><th>RTT.io field (camelCase)</th><th>Board field (snake_case)</th></tr></thead>
+    <tbody>
+      <tr><td><code>temporalData.departure.scheduleAdvertised</code></td><td><code>scheduled</code></td></tr>
+      <tr><td><code>temporalData.departure.realtimeActual</code> / <code>realtimeForecast</code></td><td><code>estimated</code> (fall back to <code>scheduled</code>)</td></tr>
+      <tr><td><code>temporalData.departure.isCancelled</code></td><td><code>is_cancelled</code></td></tr>
+      <tr><td><code>locationMetadata.platform.actual</code> / <code>planned</code></td><td><code>platform</code> (fall back to <code>"TBC"</code> — often genuinely absent, see below)</td></tr>
+      <tr><td><code>destination[].location.description</code></td><td><code>destination_name</code> (join with <code>" &amp; "</code> if the service splits)</td></tr>
+      <tr><td><code>scheduleMetadata.operator.name</code></td><td><code>operator_name</code></td></tr>
+    </tbody>
+  </table>
+  <p>Timestamps are ISO 8601 without a timezone suffix in practice (e.g. <code>"2026-07-02T18:32:00"</code>). No <code>datetime</code> module in MicroPython — slice <code>[11:16]</code> for <code>HH:MM</code> rather than parsing.</p>
+
+  <div class="sidenote"><strong>Platform can legitimately be missing:</strong> confirmed via <code>/rtt/service</code> that some stations (small stops with a fixed platform per direction) never get an explicit real-time platform-allocation message, at any level of query detail — even though a site like National Rail Enquiries may still show a default platform for the same service. <code>TBC</code> is the honest fallback, not a bug.</div>
+
+  <h2>Status codes worth handling</h2>
+  <table>
+    <tbody>
+      <tr><td><code>200</code></td><td>Success, parse <code>body["services"]</code></td></tr>
+      <tr><td><code>204</code></td><td>Valid query, no services in the time window — not an error, treat as an empty list</td></tr>
+      <tr><td><code>401</code></td><td>Access token expired — force a refresh and retry once</td></tr>
+      <tr><td><code>429</code></td><td>Rate limited — response includes <code>Retry-After</code> and <code>X-RateLimit-*</code> headers per dimension (minute/hour/day/week)</td></tr>
+    </tbody>
+  </table>
+
+  <nav class="lesson-links">
+    From <a href="../lessons/0005-departure-board.html">Lesson 5 — Building the departure board</a>.
+  </nav>
+
+</div>
+</body>
+</html>

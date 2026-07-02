@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 5 — Building the departure board</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="../assets/quiz.js" defer></script>
+</head>
+<body>
+<div class="page">
+
+  <header class="lesson-head">
+    <div class="eyebrow">Lesson 5 · Putting it together</div>
+    <h1>Building the departure board</h1>
+  </header>
+
+  <p>Four lessons built the pieces in isolation: a screen that draws text over SPI, a radio that joins a network, an HTTP client that fetches JSON. This lesson wires them into one loop that polls a real API — <a href="https://api-portal.rtt.io" target="_blank" rel="noopener">RTT.io (Realtime Trains)</a> — for live departures from a real station and renders them, on a timer, forever. It's also where the gap between "embedded" and "a full-powered machine" stops being theoretical: every section below is something that broke, or would have broken, specifically because this is a microcontroller and not a laptop.</p>
+
+  <div class="sidenote"><strong>A scope change worth naming:</strong> the reference implementation this lesson works from — <a href="https://github.com/chrisys/train-departure-display" target="_blank" rel="noopener">chrisys/train-departure-display</a> — talks to National Rail's OpenLDBWS, which is a SOAP/XML API. MicroPython has no XML parser in its standard library, and hand-rolling one is a lesson in itself, not a good first real-API integration. RTT.io covers the same UK rail data as plain JSON, so that's what the workbook actually calls — the camelCase-to-snake_case exercise below applies the same idea chrisys's script demonstrates, just against a JSON body instead of a SOAP envelope.</p></div>
+
+  <h2>Discovery 1 — the key wasn't usable directly</h2>
+  <p>The first thing the workbook tried was the obvious thing: put the RTT.io key straight in an <code>Authorization: Bearer</code> header and call the departures endpoint. It came back <code>401 {"error":"Invalid or expired token"}</code>. Worth debugging on a laptop with <code>curl</code>, not by redeploying to the Pico over and over — a USB round-trip plus a Wi-Fi join is a slow way to iterate on an HTTP bug that has nothing to do with the board.</p>
+  <p>The key turned out to be a long-life <strong>refresh</strong> token, not an access token. RTT.io's spec is explicit about the two-tier model:</p>
+  <blockquote class="citation">
+    "You may either have: solely an access token which grants you a long-life entitlement to the system or, long-life refresh token which you will need to request a short-life access token with."
+    <cite><a href="https://github.com/realtimetrains/api-specification" target="_blank" rel="noopener">Realtime Trains API specification</a></cite>
+  </blockquote>
+  <p><code>GET /api/get_access_token</code>, authenticated with the refresh token, returns a real access token good for about 20 minutes. That access token is what actually goes on the departures request.</p>
+
+  <div class="sidenote"><strong>vs. a full machine:</strong> on a laptop, a library like <code>requests-oauthlib</code> or any modern SDK client hides this exchange-and-refresh dance behind one object you construct once. MicroPython has no such library here — <code>get_access_token()</code> in the workbook is the whole refresh flow, written out by hand, because there's nothing to import that does it for you.</p></div>
+
+  <h2>Discovery 2 — no wall clock to check expiry against</h2>
+  <p>The access token's response includes a <code>validUntil</code> ISO timestamp. The natural move is to compare it against the current time and refresh just before it lapses — except the Pico has no wall clock unless you explicitly sync one over NTP, which this project hasn't done. <code>time.time()</code> on a freshly-booted board is relative to boot, not to 2026.</p>
+  <p>The workaround is to stop trying to agree with the server's clock at all. <code>time.ticks_ms()</code> and <code>time.ticks_diff()</code> give a monotonic, boot-relative timer that's perfectly sufficient for "refresh again after roughly 15 minutes" — deliberately short of the ~20 minute real expiry, with margin, rather than exact:</p>
+  <pre><code>ACCESS_TOKEN_LIFETIME_MS = 15 * 60 * 1000
+
+def get_access_token(force=False):
+    global _access_token, _access_token_fetched_at
+    now = time.ticks_ms()
+    if (not force and _access_token is not None
+            and time.ticks_diff(now, _access_token_fetched_at) &lt; ACCESS_TOKEN_LIFETIME_MS):
+        return _access_token
+    ...</code></pre>
+  <p>Belt and braces: <code>fetch_departures()</code> also catches a <code>401</code> on the departures call itself and force-refreshes once before giving up. Between the timer and the reactive retry, an expired token never surfaces as a visible failure.</p>
+
+  <div class="quiz" data-answer="ticks_ms|time.ticks_ms|ticks_ms()|time.ticks_ms()">
+    <div class="q">Which function gives you a monotonic, boot-relative clock on MicroPython when there's no synced wall-clock time to compare against?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>De-camel-casing a live API</h2>
+  <p>RTT.io's JSON, like most web APIs, is written in camelCase — <code>temporalData</code>, <code>scheduleAdvertised</code>, <code>realtimeForecast</code>, <code>locationMetadata</code>. Idiomatic Python is snake_case. <code>normalize_service()</code> is the one function in the workbook whose entire job is that translation, flattening a deeply-nested camelCase tree into the flat dict the display actually renders:</p>
+  <pre><code>departure = service["temporalData"]["departure"]
+scheduled = departure["scheduleAdvertised"]
+estimated = departure.get("realtimeActual") or departure.get("realtimeForecast") or scheduled
+...
+return {
+    "scheduled": hhmm(scheduled),
+    "estimated": hhmm(estimated),
+    "is_cancelled": bool(departure.get("isCancelled")),
+    "platform": platform,
+    "destination_name": destination_name,
+    "operator_name": operator_name,
+}</code></pre>
+  <p>Everything past this one function deals only in snake_case, board-shaped fields — <code>render()</code> never sees a camelCase key. That boundary is the same idea chrisys's OpenLDBWS script applies to SOAP/XML: parse the vendor's shape once, at the edge, into your own.</p>
+
+  <h2>No <code>datetime</code>, either</h2>
+  <p>RTT.io's timestamps are ISO 8601: <code>"2026-07-02T18:32:00"</code>. On a full Python install, <code>datetime.fromisoformat()</code> parses that in one call. MicroPython's standard library doesn't ship a general-purpose <code>datetime</code> module at all — the workbook's <code>hhmm()</code> just slices the string:</p>
+  <pre><code>def hhmm(iso_datetime):
+    if not iso_datetime:
+        return "--:--"
+    return iso_datetime[11:16]</code></pre>
+  <p>That's not a shortcut taken for this lesson specifically — it's genuinely the normal way to handle fixed-format timestamps in MicroPython when you don't need general date arithmetic. Pulling in a full ISO-8601 parser for six characters of a string would cost more flash and RAM than the problem is worth.</p>
+
+  <h2>Memory is a shared, finite thing now</h2>
+  <p>The RP2350 has <a href="../reference/pico-2-w-specs.html">520&nbsp;kB of SRAM</a> total — code, the display driver's framebuffer-adjacent state, network buffers, and every JSON object you've parsed all share that one pool. <code>response.json()</code> materializes the <em>entire</em> nested response as live Python objects in one shot. A wide time window or an unfiltered station can return dozens of services, each a multi-level dict — on a laptop with gigabytes of RAM this is a non-event; here it's a real constraint, which is why the workbook narrows the query with <code>filterTo</code> rather than fetching everything and filtering in Python afterward.</p>
+  <p>The loop also calls <code>gc.collect()</code> explicitly after every poll:</p>
+  <pre><code># No pip, no persistent HTTP session, no OS-managed heap on this
+# board — urequests opens a fresh socket every call, and the
+# 520 KB of SRAM this shares with everything else means a forced
+# collect after each poll is worth the cycles it costs.
+gc.collect()
+time.sleep(POLL_SECONDS)</code></pre>
+  <p>On CPython you essentially never call <code>gc.collect()</code> by hand — the generational collector runs on its own schedule and there's enough headroom not to think about it. On a board with 520&nbsp;kB total, forcing a collection right after the biggest allocation of the loop (the parsed JSON body, now out of scope) is cheap insurance against fragmentation slowly eating the heap over a device that's meant to run for weeks.</p>
+
+  <div class="quiz" data-answer="filterto|filterTo|filter to|the filterto parameter">
+    <div class="q">The workbook narrows every departures request to one destination using which RTT.io query parameter, specifically to keep the parsed response small on a memory-constrained board?</div>
+    <input type="text" placeholder="type your answer">
+    <button>Check</button>
+    <div class="feedback"></div>
+  </div>
+
+  <h2>One loop, no threads</h2>
+  <p>There's no background thread quietly polling while the display stays responsive. <code>main()</code> is a single <code>while True</code>: fetch, render, sleep, repeat. If <code>fetch_departures()</code> is slow — a sluggish DNS lookup, a slow TLS handshake — the display simply doesn't update until it returns. The workbook's answer isn't concurrency, it's graceful degradation: on any exception, <code>render(display, [], error=e)</code> puts the error on screen instead of leaving the board frozen on stale data with no explanation, and the loop keeps going next cycle rather than crashing out.</p>
+
+  <h2>Secrets, in plain text, on the device</h2>
+  <p>The refresh token lives in <code>config.py</code> on the Pico's own filesystem, unencrypted — the same pattern already used for the Wi-Fi password. There's no keychain, no environment-variable injection, no secrets manager between the filesystem and the value your code reads. RTT.io's own spec flags this as a real concern, not a hypothetical one:</p>
+  <blockquote class="citation">
+    "It is a requirement that no token is placed in a distributable user application unless specifically authorised by us. End-user applications are expected to proxy their requests through a server-side application such that token is not available publicly."
+    <cite><a href="https://github.com/realtimetrains/api-specification" target="_blank" rel="noopener">Realtime Trains API specification</a></cite>
+  </blockquote>
+  <p>For a single personal device that never leaves your desk, that risk is low — but it's worth being honest about what "low" means here: anyone with physical access to this board and a way to read its flash gets the token in the clear. A server-side deployment would keep the token behind a proxy specifically so a compromised client never sees it. An embedded device generally can't do that, because the device <em>is</em> the client making the request directly.</p>
+
+  <h2>Case study: an API that's honest about its own gaps</h2>
+  <p>The workbook shows <code>Plat TBC</code> for a lot of real departures from Wandsworth Town — even though National Rail Enquiries' own site shows a platform for some of those same services. Checking <code>/rtt/service</code> (the full per-stop journey, not just the departures summary) for one of those trains confirmed it wasn't a parsing bug: RTT.io's data for that specific stop has no platform value at all, at any level of detail, while other stops on the same service (Waterloo, Clapham Junction, Wimbledon) all have one.</p>
+  <p>Two live systems drawing on the same underlying Network Rail data can genuinely disagree on completeness for a given field at a given station — NRE likely falls back to a static default platform assignment for small stations with a fixed platform-per-direction, where RTT.io only echoes explicit real-time allocation messages and none were ever sent for this stop. <code>TBC</code> is the honest thing to show, not a bug to chase — the same "read what the API is actually telling you, not what you assumed it would" instinct from reading the ILI9341 datasheet against its driver in lesson 2, now applied to a live third-party API instead of a chip.</p>
+
+  <h2>Step — configure your station, deploy</h2>
+  <p>The workbook's <code>config.py</code> now carries everything: Wi-Fi, display pins, and the RTT.io refresh token plus your origin/destination CRS codes:</p>
+  <pre><code>RTT_IO_REFRESH_TOKEN = "your-refresh-token"
+RTT_IO_HOST = "data.rtt.io"
+STATION_CRS = "WNT"   # your departure station
+DEST_CRS = "WAT"      # leave "" to show every destination</code></pre>
+  <pre><code>uv run mpremote cp workbooks/lesson-0005-departure-board/firmware/config.py :config.py
+uv run mpremote cp workbooks/lesson-0005-departure-board/firmware/main.py :main.py
+uv run mpremote cp workbooks/lesson-0005-departure-board/firmware/lib/ili9341.py :lib/ili9341.py
+uv run mpremote reset</code></pre>
+  <div class="win-box">
+    <div class="label">Win condition</div>
+    The board connects, then shows up to six live departures from your station — scheduled time, destination, platform (or <code>TBC</code>), amber "exp HH:MM" when a service is running late, and red "cancelled" rows for cancellations — refreshing once a minute, indefinitely, recovering on its own from a dropped Wi-Fi link or an expired token.
+  </div>
+
+  <div class="sidenote">
+    <strong>vs. Arduino/C:</strong> the C SDK has no built-in JSON type at all — you'd reach for a third-party library like <code>cJSON</code>, walk a pointer-based tree, and manage its memory yourself. TLS is a similar story: MicroPython's <code>urequests</code> on this port already links against a TLS stack for you (certificate verification disabled, per lesson 4, but the handshake itself just works); on the C SDK you'd configure lwIP's mbedTLS integration by hand before your first HTTPS byte. Both gaps — JSON and TLS — are exactly where MicroPython's "batteries included" standard library earns its keep for a project like this one.
+  </div>
+
+  <h2>Primary sources</h2>
+  <ul>
+    <li><a href="https://github.com/realtimetrains/api-specification" target="_blank" rel="noopener">Realtime Trains API specification</a> — authentication model, <code>/rtt/location</code>, <code>/rtt/service</code>, and <code>/api/get_access_token</code>.</li>
+    <li><a href="https://github.com/chrisys/train-departure-display" target="_blank" rel="noopener">chrisys/train-departure-display</a> — the OpenLDBWS-based reference this workbook's structure (parse-at-the-edge, normalize to snake_case, dedupe/sort) is adapted from.</li>
+  </ul>
+
+  <h2>Reference</h2>
+  <ul>
+    <li><a href="../reference/departure-board-api.html">RTT.io departures cheat sheet</a></li>
+  </ul>
+
+  <p class="ask-teacher">Questions about any of this — why the refresh/access split exists at all, what a real reconnect-and-backoff strategy would look like instead of a flat 60-second retry, how you'd add NTP sync if you wanted real timestamps — just ask.</p>
+
+  <nav class="lesson-links">
+    Previous: <a href="0004-first-http-request.html">Lesson 4 — Your first HTTP request</a>.
+    Workbook: <code>workbooks/lesson-0005-departure-board/</code>
+  </nav>
+
+</div>
+</body>
+</html>

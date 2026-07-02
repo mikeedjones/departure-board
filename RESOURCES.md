@@ -16,6 +16,10 @@
   Base protocol reference (CS/SCLK/MOSI/MISO, clock polarity/phase, 3-wire vs 4-wire variants). Use for: general SPI vocabulary before diving into a chip-specific datasheet.
 - [rdagger/micropython-ili9341](https://github.com/rdagger/micropython-ili9341) (MIT)
   Source of the vendored driver at `workbooks/lesson-0002-command-or-data/firmware/lib/ili9341.py`. Use for: what a given driver method actually does before reaching for the datasheet — cross-check the two together.
+- [Realtime Trains (RTT.io) API specification](https://github.com/realtimetrains/api-specification)
+  Authoritative OpenAPI spec for the live departure data this board actually polls (lesson 5) — UK National Rail departures as plain JSON. Covers the refresh-token/access-token exchange (`/api/get_access_token`), the `/rtt/location` departures-summary endpoint, and the `/rtt/service` per-stop-detail endpoint. Note: the key issued from api-portal.rtt.io is a long-life *refresh* token, not directly usable as a Bearer token — confirmed by testing directly against the API with `curl` before writing any device code.
+- [chrisys/train-departure-display](https://github.com/chrisys/train-departure-display)
+  Reference implementation this project's departure-parsing structure (parse-at-the-edge into a flat dict, dedupe/sort) is adapted from — it targets National Rail's OpenLDBWS SOAP/XML API rather than RTT.io's JSON, since MicroPython has no XML parser in its standard library. Use for: the overall shape of a departure-board data pipeline, not a literal port.
 
 ## Wisdom (Communities)
 
@@ -26,5 +30,6 @@
 
 ## Gaps
 
-- Reconnect-on-failed-request pattern is documented (§3.8.3, above, and `reference/http-requests.html`) but not yet built into any workbook — still needed once the departure-data poll loop is written for real.
-- No curated resource yet for the actual transit/departure data API this board will eventually poll — endpoint, auth, and JSON schema all still undecided.
+- Reconnect logic in lesson 5's workbook is a flat 60-second retry on any exception, not the backoff-with-cap pattern real long-running deployments would want — fine for a desk device, worth revisiting if this ever runs somewhere less reliable than home Wi-Fi.
+- No NTP sync yet, so the board has no real wall-clock time — token-expiry tracking uses a relative `ticks_ms()` timer instead of comparing against the server's `validUntil`. Fine for now; would matter if a future lesson needs an actual displayed clock.
+- RTT.io platform data is inconsistently populated per station (confirmed via `/rtt/service` for Wandsworth Town, see `reference/departure-board-api.html`) — the user is planning to add their own platform-inference logic on top of the API's gaps.
