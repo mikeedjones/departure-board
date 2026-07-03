@@ -11,8 +11,8 @@ below works. Wiring is write-only SPI (no MISO connection to the display).
 
 | Part | Notes |
 |---|---|
-| Raspberry Pi Pico 2 W | RP2350 + CYW43439 Wi-Fi. A plain "Pico 2" (no W) won't work — no wireless. |
-| ILI9341 TFT display breakout, 240×320, SPI | Needs CS, DC (aka RS), RST, and a backlight (LED/BL) pin broken out separately from the SPI bus. |
+| [Raspberry Pi Pico 2 W](https://thepihut.com/products/raspberry-pi-pico-2-w) | RP2350 + CYW43439 Wi-Fi. A plain "Pico 2" (no W) won't work — no wireless. |
+| [ILI9341 TFT display breakout, 240×320, SPI](https://thepihut.com/products/2-4-lcd-display-module-240x320) | Needs CS, DC (aka RS), RST, and a backlight (LED/BL) pin broken out separately from the SPI bus. |
 | 8 jumper wires | 3V3, GND, SCK, MOSI, CS, DC, RST, backlight |
 | USB cable (micro-USB) | Flashes MicroPython and powers the board |
 
@@ -37,7 +37,8 @@ SPI bus 0, 20 MHz.
 
 1. **Flash MicroPython.** Hold BOOTSEL while plugging the Pico 2 W into USB,
    then drag the latest Pico 2 W UF2 from [micropython.org](https://micropython.org/download/)
-   onto the `RPI-RP2` drive that appears.
+   onto the `RPI-RP2` drive that appears. Pico 2 W might come up as 
+   "RP2350" instead of "RPI-RP2", and ready to be flashed with MicroPython.
 2. **Install tooling.** `uv sync` (installs `mpremote`, pinned in
    `pyproject.toml`).
 3. **Wire the display** per the table above.
