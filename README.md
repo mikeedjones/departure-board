@@ -6,8 +6,7 @@ for departures from a station of your choice.
 
 ## Parts list
 
-No specific vendor/SKU is pinned down here — any part matching the spec
-below works. Wiring is write-only SPI (no MISO connection to the display).
+Any part matching the spec below works. I bought mine from [The Pi Hut](https://thepihut.com) in the UK. Wiring is write-only SPI (no MISO connection to the display).
 
 | Part | Notes |
 |---|---|
